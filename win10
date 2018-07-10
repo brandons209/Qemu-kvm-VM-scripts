@@ -1,0 +1,81 @@
+#!/bin/bash
+. /home/peridot/scripts/vm-scripts/binder-scripts/binders.sh
+
+OPTS="$OPTS -name "Windows-10""
+OPTS="$OPTS -m 12G -mem-path /dev/hugepages"
+OPTS="$OPTS -cpu host,kvm=off,hv_relaxed,hv_vapic,hv_spinlocks=0x1fff,hv_time,hv_vendor_id=null"
+OPTS="$OPTS -smp 8,cores=8,sockets=1,threads=1"
+#OPTS="$OPTS -netdev user,id=vmnic -device virtio-net,netdev=vmnic" #creates NAT network to connect vm to internet, no host setup required
+OPTS="$OPTS -netdev bridge,id=vmnic,br=br0,helper=/usr/lib/qemu/qemu-bridge-helper -device virtio-net,netdev=vmnic" #bridges host network to guest, allowing guest access to host LAN
+OPTS="$OPTS -rtc clock=host,base=localtime"
+
+echo Unbinding GPU and USB Controllers
+## GPU
+unbind '10de 1c03' '26:00.0' "multifunction=on"
+unbind '10de 10f1' '26:00.1'
+## Motherboard USB Controllers
+#unbind '1022 145f' '27:00.3'
+#unbind '1022 43bb' '03:00.0'
+## Fresco Logic USB 3.0 PCIE Controllers
+unbind '1b73 1100' '23:00.0'
+unbind '1b73 1100' '22:00.0'
+echo Unbinding Successful!
+sleep 2
+
+## Add hard disks
+echo Adding hard disks...
+sleep 2
+mount_ovmf_bios
+mount_disk_img "/mnt/vm-image/win10.img"
+mount_2TB_disk
+echo Hard disks added!
+
+## kill background programs
+echo Killing unneeded background programs...
+sleep 2
+killall -I discord slack thunderbird skypeforlinux
+killall -I discord
+echo Processes killed!
+
+##Allocate hugepages for better performance
+echo Allocating memory via hugepages...
+sleep 2
+allocate_hugepages "6200"
+
+## Start VM, use taskset to run on cores 8-15, chrt to make sure it doesnt run on 1 core only
+echo Memory allocated! Standby for machine start...
+#sudo chrt -r 1 taskset -c 4-15 qemu-system-x86_64 $OPTS
+sudo qemu-system-x86_64 $OPTS
+
+echo Hope you enjoyed your VM experience!
+echo Rebinding GPU and USB Controllers back to host...
+## GPU
+rebind_to_driver '26:00.0' 'nvidia'
+rebind_to_driver '26:00.1' 'snd_hda_intel'
+## Motherboard USB Controllers
+#rebind '27:00.3'
+#rebind '03:00.0'
+## Fresco Logic USB 3.0 PCIE Controllers
+rebind '23:00.0'
+rebind '22:00.0'
+qemu_exit
+echo Rebind Successful!
+sleep 2
+
+echo Releasing memory from hugepages...
+release_hugepages
+echo Release successful!
+
+echo Restarting killed programs...
+discord </dev/null &>/dev/null &
+slack </dev/null &>/dev/null &
+thunderbird </dev/null &>/dev/null &
+skypeforlinux
+sleep 6
+wmctrl -c Discord
+wmctrl -c Slack
+echo Programs restarted!
+
+echo Repairing 2TB drive...
+sudo ntfsfix /dev/disk/by-uuid/0A82E3C182E3AEFF
+echo Repair Complete!

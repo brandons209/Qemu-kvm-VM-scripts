@@ -1,0 +1,17 @@
+#!/bin/bash
+
+. $HOME/scripts/vm-scripts/binders.sh
+
+echo Unbinding GPU and USB Hub
+unbind '10de 1c03' '26:00.0'
+unbind '10de 10f1' '26:00.1'
+sleep 0.5
+echo Unbinding Successful!
+
+read -n 1 -s -r -p "Press any key to continue"
+
+echo Rebinding GPU and USB Hub to host...
+sleep 0.5
+rebind_to_driver '10de 1c03' '26:00.0' 'nvidia'
+rebind_to_driver '10de 10f1' '26:00.1' 'snd_hda_intel'
+echo Rebind complete!
